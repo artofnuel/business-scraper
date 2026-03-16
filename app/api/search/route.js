@@ -36,6 +36,7 @@ export async function POST(request) {
             email: l.email || '',
             phone: l.phone || 'N/A',
             website: l.website || 'N/A',
+            emailSource: l.emailSource || '',
             source: l.source
         }));
 

@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import pLimit from 'p-limit';
 import { extractContactInfo, pickBestEmail } from './emailExtractor';
+import { domainEmailSweep } from './domainEmailSweep';
 
 const limit = pLimit(5); // max 5 concurrent requests
 const DELAY_MS = 2000;
@@ -33,24 +34,32 @@ export async function scrapeWebsites(leads) {
                 const $ = cheerio.load(html);
 
                 let { emails, phones } = extractContactInfo(html);
+                let emailSource = '';
 
                 // 2. Scrape Meta Description
                 const desc = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
                 lead.description = desc ? desc.substring(0, 150) : '';
 
-                // 3. Fallback Contact Links if no email
-                if (emails.length === 0) {
+                // 3. If homepage email found → mark source
+                if (emails.length > 0) {
+                    emailSource = 'homepage';
+                } else {
+                    // 4. Fallback: Scrape Contact / About pages
                     const links = new Set();
                     $('a').each((i, el) => {
                         const href = $(el).attr('href');
                         if (href) {
                             const lowerHref = href.toLowerCase();
-                            if (lowerHref.includes('contact') || lowerHref.includes('about') || lowerHref.includes('support') || lowerHref.includes('help')) {
-                                // simple url format
+                            if (
+                                lowerHref.includes('contact') ||
+                                lowerHref.includes('about') ||
+                                lowerHref.includes('support') ||
+                                lowerHref.includes('help')
+                            ) {
                                 if (href.startsWith('http')) links.add(href);
                                 else if (href.startsWith('/')) links.add(new URL(href, url).href);
                             }
-                            // Also scrape simple mailto links
+                            // Also capture mailto: links from homepage
                             if (lowerHref.startsWith('mailto:')) {
                                 const mail = lowerHref.replace('mailto:', '').split('?')[0];
                                 if (mail.includes('@')) emails.push(mail);
@@ -66,27 +75,36 @@ export async function scrapeWebsites(leads) {
                                 timeout: 5000,
                                 headers: { 'User-Agent': 'Mozilla/5.0' }
                             });
-                            const contactHtml = contactRes.data;
-                            const contactData = extractContactInfo(contactHtml);
+                            const contactData = extractContactInfo(contactRes.data);
                             emails = emails.concat(contactData.emails);
                             phones = phones.concat(contactData.phones);
                         } catch (err) {
                             // ignore contact page errors
                         }
                     }
+
+                    if (emails.length > 0) {
+                        emailSource = 'contact-page';
+                    } else {
+                        // 5. Domain Email Sweep fallback (DNS MX verified)
+                        const sweepEmails = await domainEmailSweep(url);
+                        if (sweepEmails.length > 0) {
+                            emails = sweepEmails;
+                            emailSource = 'domain-pattern';
+                        }
+                    }
                 }
 
-                // 4. Update Lead Object
-                // Remove duplicates again after multiple page scrapes
+                // 6. Update Lead Object
                 emails = Array.from(new Set(emails));
                 phones = Array.from(new Set(phones));
 
                 if (!lead.email && emails.length > 0) {
                     lead.email = pickBestEmail(emails);
+                    lead.emailSource = emailSource;
                 }
 
                 if ((!lead.phone || lead.phone === 'N/A') && phones.length > 0) {
-                    // Just grab first valid-looking phone
                     lead.phone = phones[0];
                 }
 

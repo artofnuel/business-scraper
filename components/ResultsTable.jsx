@@ -2,6 +2,23 @@
 
 import { useLeadStore } from '@/store/leadStore';
 
+const EMAIL_SOURCE_BADGE = {
+  homepage: { label: 'Homepage', className: 'bg-emerald-100 text-emerald-700' },
+  'contact-page': { label: 'Contact Page', className: 'bg-blue-100 text-blue-700' },
+  'domain-pattern': { label: 'Domain Pattern', className: 'bg-amber-100 text-amber-700' },
+};
+
+function EmailSourceBadge({ source }) {
+  if (!source) return <span className="text-neutral-400">—</span>;
+  const badge = EMAIL_SOURCE_BADGE[source];
+  if (!badge) return <span className="text-neutral-400">—</span>;
+  return (
+    <span className={`px-2 py-1 rounded-md text-xs font-medium ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
 export default function ResultsTable() {
   const { results, loading } = useLeadStore();
 
@@ -17,6 +34,7 @@ export default function ResultsTable() {
               <th className="p-4 font-medium">Category</th>
               <th className="p-4 font-medium">Location</th>
               <th className="p-4 font-medium">Email</th>
+              <th className="p-4 font-medium">Email Source</th>
               <th className="p-4 font-medium">Phone</th>
               <th className="p-4 font-medium">Website</th>
               <th className="p-4 font-medium">Source</th>
@@ -29,6 +47,9 @@ export default function ResultsTable() {
                 <td className="p-4 text-neutral-600">{lead.category || 'N/A'}</td>
                 <td className="p-4 text-neutral-600">{lead.location || 'N/A'}</td>
                 <td className="p-4 text-neutral-600">{lead.email || 'N/A'}</td>
+                <td className="p-4">
+                  <EmailSourceBadge source={lead.emailSource} />
+                </td>
                 <td className="p-4 text-neutral-600">{lead.phone || 'N/A'}</td>
                 <td className="p-4">
                   {lead.website && lead.website !== 'N/A' ? (
